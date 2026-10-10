@@ -117,28 +117,36 @@ class InvisibilityCloak:
         self.dark_frame_counter = 0
 
     def find_working_camera(self):
-        """Attempts preferred camera, and falls back to other camera indices."""
-        indices = [self.preferred_camera]
-        for alt in [1, 0, 2]:
-            if alt not in indices:
-                indices.append(alt)
+        """
+        Scans all available cameras and selects the one with REAL, non-black video feed (highest brightness).
+        """
+        best_idx = self.preferred_camera
+        best_brightness = -1.0
+        
+        candidates = [self.preferred_camera]
+        for alt in [0, 1, 2]:
+            if alt not in candidates:
+                candidates.append(alt)
                 
-        for idx in indices:
-            print(f"[*] Testing camera index {idx}...")
+        for idx in candidates:
             cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
             if not cap.isOpened():
                 cap = cv2.VideoCapture(idx)
             if cap.isOpened():
-                # Read warm-up frames
                 ret = False
-                for _ in range(5):
+                test_frame = None
+                for _ in range(6):
                     ret, test_frame = cap.read()
                 if ret and test_frame is not None:
-                    cap.release()
-                    print(f"[+] Found working camera at index {idx}!")
-                    return idx
+                    brightness = float(test_frame.mean())
+                    print(f"[*] Camera {idx} detected: brightness = {brightness:.2f}")
+                    if brightness > best_brightness:
+                        best_brightness = brightness
+                        best_idx = idx
                 cap.release()
-        return self.preferred_camera
+                
+        print(f"[+] Selected Camera {best_idx} (brightness: {best_brightness:.2f})")
+        return best_idx
 
     def open_video_source(self):
         if self.is_demo_mode:

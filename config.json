@@ -30,7 +30,7 @@
       "upper2": null
     }
   },
-  "camera_index": 1,
+  "camera_index": 0,
   "morph_kernel_size": 3,
   "open_iterations": 2,
   "dilate_iterations": 2,

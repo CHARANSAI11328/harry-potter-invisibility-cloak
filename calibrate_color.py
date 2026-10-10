@@ -24,17 +24,31 @@ DEMO_VIDEO = os.path.join(BASE_DIR, "demo_cloak.mp4")
 def empty_callback(x):
     pass
 
-def open_working_camera(preferred=1):
+def open_working_camera(preferred=0):
+    best_idx = preferred
+    best_brightness = -1.0
+    best_cap = None
     for idx in [preferred, 0 if preferred != 0 else 1]:
         cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
         if not cap.isOpened():
             cap = cv2.VideoCapture(idx)
         if cap.isOpened():
+            ret = False
+            frame = None
             for _ in range(5):
-                ret, _ = cap.read()
-            if ret:
-                return cap, idx
+                ret, frame = cap.read()
+            if ret and frame is not None:
+                brightness = float(frame.mean())
+                if brightness > best_brightness:
+                    if best_cap is not None:
+                        best_cap.release()
+                    best_brightness = brightness
+                    best_idx = idx
+                    best_cap = cap
+                    continue
             cap.release()
+    if best_cap is not None:
+        return best_cap, best_idx
     return None, preferred
 
 def main():
