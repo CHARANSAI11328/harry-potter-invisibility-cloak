@@ -5,7 +5,9 @@ Standalone HSV Color Calibrator for Invisibility Cloak
 Use this utility to fine-tune your cloth color detection.
 - Click anywhere on the video to sample the cloth's HSV values automatically.
 - Adjust sliders to fine-tune tolerance.
-- Press 's' to save the tuned color range into config.json!
+- Press 'TAB' to switch between Camera 0 and Camera 1.
+- Press 'D' to test on the built-in demo video.
+- Press 'S' to save the tuned color range into config.json!
 =============================================================================
 """
 
@@ -15,10 +17,25 @@ import json
 import os
 import sys
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+DEMO_VIDEO = os.path.join(BASE_DIR, "demo_cloak.mp4")
 
 def empty_callback(x):
     pass
+
+def open_working_camera(preferred=1):
+    for idx in [preferred, 0 if preferred != 0 else 1]:
+        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(idx)
+        if cap.isOpened():
+            for _ in range(5):
+                ret, _ = cap.read()
+            if ret:
+                return cap, idx
+            cap.release()
+    return None, preferred
 
 def main():
     config = {}
@@ -29,20 +46,17 @@ def main():
         except Exception:
             pass
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("[!] Cannot open camera 0.")
-        sys.exit(1)
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    preferred_cam = config.get("camera_index", 1)
+    is_demo = False
+    cap, active_cam = open_working_camera(preferred_cam)
+    if cap is None:
+        print("[!] Live camera not found, opening demo video...")
+        cap = cv2.VideoCapture(DEMO_VIDEO)
+        is_demo = True
 
     win_name = "Cloth Color Calibrator"
     cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
 
-    # Initial values from custom preset or default
     init_lower = [0, 100, 70]
     init_upper = [15, 255, 255]
     if "presets" in config and "custom" in config["presets"]:
@@ -62,13 +76,16 @@ def main():
         nonlocal last_frame
         if event == cv2.EVENT_LBUTTONDOWN and last_frame is not None:
             h, w = last_frame.shape[:2]
-            # Limit coordinate to left half (the live camera feed)
             if x < w // 2:
                 patch = last_frame[max(0, y - 3):min(h, y + 4), max(0, x - 3):min(w // 2, x + 4)]
                 hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
                 avg_h = int(np.median(hsv[:, :, 0]))
                 avg_s = int(np.median(hsv[:, :, 1]))
                 avg_v = int(np.median(hsv[:, :, 2]))
+
+                if avg_v < 25 or avg_s < 15:
+                    print("[!] Clicked region is too dark/black. Click on a well-lit colored cloth.")
+                    return
 
                 h_tol, s_tol, v_tol = 14, 60, 70
                 cv2.setTrackbarPos("H_min", win_name, max(0, avg_h - h_tol))
@@ -86,17 +103,24 @@ def main():
     print("=======================================================")
     print("  - Click on your cloth in the LEFT window to sample it.")
     print("  - Adjust trackbars to make the cloth completely WHITE on the RIGHT.")
-    print("  - Press 'S' to save to config.json.")
-    print("  - Press 'Q' or [ESC] to exit.")
+    print("  - Press [TAB] to switch camera (Cam 0 <-> Cam 1)")
+    print("  - Press [D] to switch to demo video")
+    print("  - Press [S] to save to config.json.")
+    print("  - Press [Q] or [ESC] to exit.")
     print("=======================================================\n")
 
-    status_text = "Click on cloth to auto-sample | Press 'S' to Save"
+    status_text = "Click cloth in left window | [TAB] Switch Cam | [D] Demo | [S] Save"
 
     while True:
         ret, frame = cap.read()
         if not ret:
-            break
-        frame = cv2.flip(frame, 1)
+            if is_demo:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+            if not ret:
+                break
+        if not is_demo:
+            frame = cv2.flip(frame, 1)
 
         h_min = cv2.getTrackbarPos("H_min", win_name)
         h_max = cv2.getTrackbarPos("H_max", win_name)
@@ -110,18 +134,15 @@ def main():
         upper = np.array([h_max, s_max, v_max], dtype=np.uint8)
         mask = cv2.inRange(hsv, lower, upper)
 
-        # Morphological clean
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         mask_clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
         mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_DILATE, kernel, iterations=2)
 
-        # Highlight detected regions on the feed
         preview = frame.copy()
         preview[mask_clean > 0] = [0, 255, 0] # Highlight green
 
         mask_bgr = cv2.cvtColor(mask_clean, cv2.COLOR_GRAY2BGR)
 
-        # Resize to fit side-by-side
         disp_w, disp_h = 640, 360
         left_view = cv2.resize(preview, (disp_w, disp_h))
         right_view = cv2.resize(mask_bgr, (disp_w, disp_h))
@@ -129,19 +150,34 @@ def main():
         combined = np.hstack([left_view, right_view])
         last_frame = combined
 
-        # Draw labels
-        cv2.putText(combined, "ORIGINAL + HIGHLIGHT (Click to sample)", (20, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        cv2.putText(combined, "FILTERED MASK (Should be white)", (disp_w + 20, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        source_label = "DEMO VIDEO" if is_demo else f"CAMERA {active_cam}"
+        cv2.putText(combined, f"ORIGINAL + DETECTED [{source_label}]", (20, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 255), 2)
+        cv2.putText(combined, "FILTERED MASK (White = Cloak)", (disp_w + 20, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 255, 255), 2)
         cv2.putText(combined, status_text, (20, disp_h - 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1)
 
         cv2.imshow(win_name, combined)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q') or key == 27:
             break
+        elif key == ord('\t'): # Switch camera
+            cap.release()
+            new_cam = 0 if active_cam == 1 else 1
+            cap, active_cam = open_working_camera(new_cam)
+            is_demo = False
+            status_text = f"Switched to Camera {active_cam}!"
+        elif key == ord('d') or key == ord('D'):
+            cap.release()
+            is_demo = not is_demo
+            if is_demo:
+                cap = cv2.VideoCapture(DEMO_VIDEO)
+                status_text = "Switched to Demo Video!"
+            else:
+                cap, active_cam = open_working_camera(preferred_cam)
+                status_text = f"Switched to Camera {active_cam}!"
         elif key == ord('s') or key == ord('S'):
             if "presets" not in config:
                 config["presets"] = {}
