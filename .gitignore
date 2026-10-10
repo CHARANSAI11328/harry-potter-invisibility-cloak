@@ -1,0 +1,19 @@
+# Python Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output snapshots
+snapshots/*.jpg
+snapshots/*.png
+!snapshots/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db

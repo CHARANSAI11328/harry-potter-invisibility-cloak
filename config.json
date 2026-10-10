@@ -1,0 +1,38 @@
+{
+  "active_preset": "red",
+  "presets": {
+    "red": {
+      "name": "Red Cloak (Double Hue)",
+      "lower1": [0, 120, 70],
+      "upper1": [10, 255, 255],
+      "lower2": [170, 120, 70],
+      "upper2": [180, 255, 255]
+    },
+    "blue": {
+      "name": "Blue Cloak",
+      "lower1": [90, 80, 50],
+      "upper1": [130, 255, 255],
+      "lower2": null,
+      "upper2": null
+    },
+    "green": {
+      "name": "Green Cloak",
+      "lower1": [35, 60, 50],
+      "upper1": [85, 255, 255],
+      "lower2": null,
+      "upper2": null
+    },
+    "custom": {
+      "name": "Custom Tuned Cloak",
+      "lower1": [0, 100, 100],
+      "upper1": [15, 255, 255],
+      "lower2": null,
+      "upper2": null
+    }
+  },
+  "camera_index": 0,
+  "morph_kernel_size": 3,
+  "open_iterations": 2,
+  "dilate_iterations": 2,
+  "feather_blur_size": 5
+}
